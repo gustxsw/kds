@@ -1,30 +1,30 @@
-const express = require('express');
-const Firebird = require('node-firebird');
-const http = require('http');
-const socketIo = require('socket.io');
-const path = require('path');
+const express = require("express");
+const Firebird = require("node-firebird");
+const http = require("http");
+const socketIo = require("socket.io");
+const path = require("path");
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
 const server = http.createServer(app);
 const io = socketIo(server);
 
 const dbOptions = {
-  host: '127.0.0.1',
+  host: "localhost",
   port: 3050,
-  database: 'C:/GDOOR Sistemas/GDOOR PRO/DATAGES.FDB',
-  user: 'SYSDBA',
-  password: 'masterkey',
+  database: "C:/GDOOR Sistemas/GDOOR PRO/DATAGES.FDB",
+  user: "SYSDBA",
+  password: "masterkey",
   lowercase_keys: false,
-  pageSize: 4096
+  pageSize: 4096,
 };
 
 function buscarPedidos(callback) {
-  Firebird.attach(dbOptions, function(err, db) {
+  Firebird.attach(dbOptions, function (err, db) {
     if (err) {
-      console.error('Erro ao conectar no Firebird:', err.message);
+      console.error("Erro ao conectar no Firebird:", err.message);
       return callback(err);
     }
 
@@ -69,10 +69,10 @@ function buscarPedidos(callback) {
       ORDER BY DATA_HORA_EMISSAO ASC, di.IDDAV, di.ITEM
     `;
 
-    db.query(sql, function(err, rows) {
+    db.query(sql, function (err, rows) {
       db.detach();
       if (err) {
-        console.error('Erro na consulta de pedidos:', err.message);
+        console.error("Erro na consulta de pedidos:", err.message);
         return callback(err);
       }
       callback(null, rows);
@@ -80,32 +80,37 @@ function buscarPedidos(callback) {
   });
 }
 
-app.get('/api/pedidos', (req, res) => {
+app.get("/api/pedidos", (req, res) => {
   buscarPedidos((err, rows) => {
     if (err) {
-      return res.status(500).json({ error: 'Falha ao conectar ao banco de dados' });
+      return res
+        .status(500)
+        .json({ error: "Falha ao conectar ao banco de dados" });
     }
     res.json(rows);
   });
 });
 
-app.post('/api/item/pronto', (req, res) => {
+app.post("/api/item/pronto", (req, res) => {
   const { idDav, item } = req.body;
 
   if (!idDav || !item) {
-    return res.status(400).json({ sucesso: false, error: 'Parâmetros inválidos' });
+    return res
+      .status(400)
+      .json({ sucesso: false, error: "Parâmetros inválidos" });
   }
 
   Firebird.attach(dbOptions, (err, db) => {
-    if (err) return res.status(500).json({ sucesso: false, error: err.message });
+    if (err)
+      return res.status(500).json({ sucesso: false, error: err.message });
 
     db.query(
-      'UPDATE DAVS_ITENS SET KDS_PRONTO = 1 WHERE IDDAV = ? AND ITEM = ?',
+      "UPDATE DAVS_ITENS SET KDS_PRONTO = 1 WHERE IDDAV = ? AND ITEM = ?",
       [idDav, item],
       (err) => {
         db.detach();
         if (err) {
-          console.error('Erro ao marcar item como pronto:', err);
+          console.error("Erro ao marcar item como pronto:", err);
           return res.status(500).json({ sucesso: false, error: err.message });
         }
         res.json({ sucesso: true });
@@ -114,16 +119,18 @@ app.post('/api/item/pronto', (req, res) => {
   });
 });
 
-app.post('/api/pedido/pronto', (req, res) => {
+app.post("/api/pedido/pronto", (req, res) => {
   const { idDav } = req.body;
 
   if (!idDav) {
-    return res.status(400).json({ sucesso: false, error: 'ID do pedido inválido' });
+    return res
+      .status(400)
+      .json({ sucesso: false, error: "ID do pedido inválido" });
   }
 
   Firebird.attach(dbOptions, (err, db) => {
     if (err) {
-      console.error('Erro ao conectar:', err);
+      console.error("Erro ao conectar:", err);
       return res.status(500).json({ sucesso: false, error: err.message });
     }
 
@@ -148,42 +155,53 @@ app.post('/api/pedido/pronto', (req, res) => {
     db.query(sqlDados, [idDav], (err, rows) => {
       if (err) {
         db.detach();
-        console.error('Erro na consulta SQL para impressão:', err);
-        return res.status(500).json({ sucesso: false, error: 'Erro ao buscar dados do pedido' });
+        console.error("Erro na consulta SQL para impressão:", err);
+        return res
+          .status(500)
+          .json({ sucesso: false, error: "Erro ao buscar dados do pedido" });
       }
 
       if (rows.length === 0) {
         db.detach();
-        return res.status(404).json({ sucesso: false, error: 'Pedido não encontrado ou já concluído/cancelado' });
+        return res.status(404).json({
+          sucesso: false,
+          error: "Pedido não encontrado ou já concluído/cancelado",
+        });
       }
 
       const agora = new Date();
-      const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const hora = agora.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
       const dataEmissao = new Date(rows[0].DATA_HORA_EMISSAO);
       const diffMs = agora - dataEmissao;
       const diffMin = Math.floor(diffMs / 60000);
 
-      const tempoProducao = diffMin < 60 
-        ? `${diffMin} min`
-        : `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`.trim();
+      const tempoProducao =
+        diffMin < 60
+          ? `${diffMin} min`
+          : `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`.trim();
 
       const mesa = rows[0].MESA.trim();
-      const observacao = rows[0].OBS ? rows[0].OBS.trim() : '';
+      const observacao = rows[0].OBS ? rows[0].OBS.trim() : "";
       const atendente = rows[0].ATENDENTE.trim();
 
-      const pedido = rows.map(r => ({
+      const pedido = rows.map((r) => ({
         QT: r.QT,
-        DESCRICAO: r.DESCRICAO.trim()
+        DESCRICAO: r.DESCRICAO.trim(),
       }));
 
       db.query(
-        'UPDATE DAVS_ITENS SET KDS_PRONTO = 1 WHERE IDDAV = ? AND COALESCE(KDS_PRONTO, 0) = 0',
+        "UPDATE DAVS_ITENS SET KDS_PRONTO = 1 WHERE IDDAV = ? AND COALESCE(KDS_PRONTO, 0) = 0",
         [idDav],
         (err) => {
           db.detach();
           if (err) {
-            console.error('Erro ao atualizar KDS_PRONTO:', err);
-            return res.status(500).json({ sucesso: false, error: 'Erro ao finalizar pedido' });
+            console.error("Erro ao atualizar KDS_PRONTO:", err);
+            return res
+              .status(500)
+              .json({ sucesso: false, error: "Erro ao finalizar pedido" });
           }
 
           res.json({
@@ -193,7 +211,7 @@ app.post('/api/pedido/pronto', (req, res) => {
             tempoProducao,
             atendente,
             observacao,
-            pedido
+            pedido,
           });
         }
       );
@@ -203,15 +221,15 @@ app.post('/api/pedido/pronto', (req, res) => {
 
 let clientesConectados = 0;
 
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   clientesConectados++;
   console.log(`Cliente KDS conectado (${clientesConectados} ativo(s))`);
 
   buscarPedidos((err, rows) => {
-    if (!err) socket.emit('atualizar', rows);
+    if (!err) socket.emit("atualizar", rows);
   });
 
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     clientesConectados--;
     console.log(`Cliente desconectado (${clientesConectados} ativo(s))`);
   });
@@ -221,16 +239,19 @@ setInterval(() => {
   if (clientesConectados > 0) {
     buscarPedidos((err, rows) => {
       if (!err) {
-        io.emit('atualizar', rows);
+        io.emit("atualizar", rows);
       }
     });
   }
 }, 10000);
 
 const PORT = 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('=====================================');
-  console.log('KDS - Monitor de Cozinha RODANDO!');
-  console.log(`Acesse em: http://localhost:${PORT} ou pelo IP da máquina na rede`);
-  console.log('=====================================');
+server.listen(PORT, "0.0.0.0", () => {
+  console.log("=====================================");
+  console.log("KDS - Monitor de Cozinha RODANDO!");
+  console.log(
+    `Acesse em: http://localhost:${PORT} ou pelo IP da máquina na rede`
+  );
+  console.log("=====================================");
+  console.log("Obrigado chatgpt!");
 });

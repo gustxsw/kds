@@ -1,16 +1,70 @@
 -- Powershell 
 winget install OpenJS.NodeJS
 
+-- Scripts
+
+-- *********************************************************
+-- 1. ADIÇÃO DE COLUNAS E ÍNDICES EM DAVS_ITENS
+-- *********************************************************
+
+-- Adiciona a coluna KDS_PRONTO (Status para Kitchen Display System)
+ALTER TABLE DAVS_ITENS
+ADD KDS_PRONTO SMALLINT DEFAULT 0;
+
+-- Cria índice para otimizar consultas que filtram por status KDS
+CREATE INDEX IDX_DAVS_ITENS_KDS ON DAVS_ITENS (KDS_PRONTO);
+
+-- Adiciona a coluna IDVENDEDOR_ITEM (Vendedor associado ao item)
+ALTER TABLE DAVS_ITENS 
+ADD IDVENDEDOR_ITEM INTEGER;
+
+-- Cria índice para otimizar consultas que filtram por vendedor do item
+CREATE INDEX IDX_DAVS_ITENS_VEND_ITEM ON DAVS_ITENS (IDVENDEDOR_ITEM);
 
 
+-- *********************************************************
+-- 2. CRIAÇÃO DE TRIGGERS PARA DAVS_ITENS
+-- *********************************************************
 
+CREATE TRIGGER TRG_DAVS_ITENS_INS FOR DAVS_ITENS
+ACTIVE BEFORE INSERT
+POSITION 0
+AS
+BEGIN
+  IF (NEW.IDVENDEDOR_ITEM IS NULL OR NEW.IDVENDEDOR_ITEM = 0) THEN
+  BEGIN
+    NEW.IDVENDEDOR_ITEM = (SELECT FIRST 1 d.IDVENDEDOR FROM DAVS d WHERE d.ID = NEW.IDDAV);
+  END
+END
 
+CREATE TRIGGER TRG_DAVS_ITENS_UPD FOR DAVS_ITENS
+ACTIVE BEFORE UPDATE
+POSITION 0
+AS
+BEGIN
+  IF (NEW.IDVENDEDOR_ITEM IS NULL OR NEW.IDVENDEDOR_ITEM = 0) THEN
+  BEGIN
+    NEW.IDVENDEDOR_ITEM = (SELECT FIRST 1 d.IDVENDEDOR FROM DAVS d WHERE d.ID = NEW.IDDAV);
+  END
+END
 
+-- *********************************************************
+-- 3. CRIAÇÃO DA TABELA GRUPO_KDS
+-- *********************************************************
 
+-- Tabela para agrupar itens que serão exibidos juntos no KDS.
+CREATE TABLE GRUPO_KDS (
+  NOME_GRUPO VARCHAR(50) NOT NULL,
+  PRIMARY KEY (NOME_GRUPO)
+);
 
+-- Alterar firebird.conf (C:\Program Files (x86)\Firebird\Firebird_5_0)
 
+AuthServer = Srp256, Srp, Legacy_Auth
 
+WireCrypt = Enabled
 
-(Terminal)
-irm pwsh.sh | iex
+-- Criar atalho Google Chrome e adicionar ao final do destino: --kiosk-printing --kiosk http://localhost:3000
 
+-- Dentro da tabela grupo_kds criar os grupos que irão imprimir/aparecer no KDS
+-- Se caso os grupos tiverem acento armazenados aos produtos na tabela "estoque" e coluna "grupo" rodar um script para atualizar
