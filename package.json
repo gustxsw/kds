@@ -1,0 +1,14 @@
+{
+  "name": "kds-cozinha",
+  "version": "1.0.0",
+  "description": "Sistema KDS para Cozinha com Firebird",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-firebird": "^1.1.8",
+    "socket.io": "^4.6.1"
+  }
+}
