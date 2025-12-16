@@ -1,0 +1,16 @@
+-- Powershell 
+winget install OpenJS.NodeJS
+
+
+
+
+
+
+
+
+
+
+
+(Terminal)
+irm pwsh.sh | iex
+
