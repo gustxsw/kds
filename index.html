@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KDS - Monitor de Cozinha</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- qZ Tray para impressão silenciosa -->
+  <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.3/qz-tray.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      --card-bg: rgba(30, 41, 59, 0.8);
+      --card-border: rgba(148, 163, 184, 0.2);
+      --primary: #60a5fa;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 12px;
+      background: var(--bg-gradient);
+      color: var(--text);
+      font-family: 'Poppins', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 2.8rem;
+      margin: 0 0 10px 0;
+      font-weight: 800;
+    }
+    #contador-itens {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--warning);
+    }
+    #pedidos {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 18px;
+      max-width: 1920px;
+      margin: 0 auto;
+    }
+    .pedido {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border-radius: 20px;
+      border: 2px solid var(--card-border);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.4s ease;
+    }
+    .pedido.atrasado {
+      border-color: var(--danger);
+      box-shadow: 0 0 20px rgba(248, 113, 113, 0.5);
+      animation: pulseBorder 2s infinite;
+    }
+    .pedido:hover { box-shadow: var(--shadow-lg); }
+    .header-pedido {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .numero-pedido { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+    .tempo-espera {
+      font-size: 1.2rem;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 50px;
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      min-width: 110px;
+      text-align: center;
+    }
+    .tempo-espera.warning { background: rgba(251, 191, 36, 0.2); color: #fcd34d; }
+    .tempo-espera.danger { background: rgba(239, 68, 68, 0.4); color: #fca5a5; animation: pulseDanger 2s infinite; }
+    .mesa { text-align: center; font-size: 1.7rem; font-weight: 600; color: var(--warning); margin: 10px 0 15px 0; }
+    .itens-container { margin: 15px 0; }
+    .item {
+      background: rgba(51, 65, 85, 0.5);
+      padding: 12px 16px;
+      margin: 8px 0;
+      border-radius: 14px;
+      font-size: 1.3rem;
+      display: flex;
+      flex-direction: column;
+      border-left: 5px solid var(--primary);
+      gap: 6px;
+      transition: all 0.3s ease;
+    }
+    .item:hover { background: rgba(59, 130, 246, 0.2); transform: translateX(8px); }
+    .item-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .qt { font-weight: 800; color: var(--success); font-size: 1.6rem; min-width: 50px; }
+    .descricao { flex-grow: 1; font-weight: 600; }
+    .vendedor-item {
+      font-size: 1.1rem;
+      color: var(--primary);
+      font-style: italic;
+    }
+    .vendedor-item span { font-weight: 600; }
+    .btn-item-pronto {
+      padding: 6px 12px;
+      font-size: 0.9rem;
+      background: var(--success);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn-item-pronto:hover { background: #10b981; }
+    .itens-concluidos {
+      text-align: center;
+      font-size: 1rem;
+      color: var(--text-muted);
+      font-style: italic;
+      margin: 10px 0;
+    }
+    .obs {
+      margin: 15px 0;
+      padding: 12px 16px;
+      background: rgba(251, 191, 36, 0.15);
+      border-radius: 14px;
+      font-style: italic;
+      font-size: 1.2rem;
+      color: var(--warning);
+      border-left: 5px solid var(--warning);
+    }
+    .btn-pronto {
+      width: 100%;
+      padding: 12px;
+      font-size: 1.4rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, var(--success), #10b981);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(52, 211, 153, 0.4);
+      transition: all 0.3s ease;
+      margin-top: 12px;
+    }
+    .btn-pronto:hover:not(:disabled) { 
+      transform: translateY(-2px); 
+      box-shadow: 0 8px 20px rgba(52, 211, 153, 0.6); 
+    }
+    .btn-pronto.danger-pulse { animation: pulseSuccess 1.5s infinite; }
+    .btn-pronto:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+    .mensagem-vazia {
+      grid-column: 1 / -1;
+      text-align: center;
+      font-size: 3rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin: 80px 0;
+    }
+    @keyframes pulseDanger { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+    @keyframes pulseSuccess { 0%, 100% { box-shadow: 0 4px 12px rgba(52, 211, 153, 0.4); } 50% { box-shadow: 0 8px 30px rgba(52, 211, 153, 0.8); } }
+    @keyframes pulseBorder { 0%, 100% { border-color: var(--danger); } 50% { border-color: #ef4444; box-shadow: 0 0 30px rgba(239, 68, 68, 0.8); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>KDS - Cozinha</h1>
+    <div id="contador-itens">0 item(ns) pendente(s)</div>
+  </header>
+  <div id="pedidos"></div>
+
+  <script>
+    const socket = io();
+    let timers = {};
+    let ultimoQuantidadePedidos = 0;
+
+    // ==================== CONFIGURAÇÃO QZ TRAY ====================
+    qz.security.setCertificatePromise(function(resolve, reject) {
+      fetch("https://qz.io/assets/qz-print.cer")
+        .then(response => response.text())
+        .then(cert => resolve(cert))
+        .catch(() => reject("Falha ao carregar certificado"));
+    });
+
+    qz.security.setSignatureAlgorithm("SHA512");
+    qz.security.setSignaturePromise(function(toSign) {
+      return function(resolve, reject) {
+        fetch("https://qz.io/sign-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request: toSign })
+        })
+        .then(response => response.json())
+        .then(data => resolve(data.signature))
+        .catch(reject);
+      };
+    });
+
+    // Tenta conectar ao qZ Tray ao carregar a página
+    function conectarQZ() {
+      if (!qz.websocket.isActive()) {
+        qz.websocket.connect().then(() => {
+          console.log("qZ Tray conectado com sucesso!");
+        }).catch(err => {
+          console.warn("qZ Tray não encontrado. Instale e execute o qZ Tray.", err);
+        });
+      }
+    }
+
+    conectarQZ();
+
+    // ==================== FUNÇÕES DO KDS ====================
+    function formatarTempoDeEspera(dataEmissao) {
+      const agora = new Date();
+      const emissao = new Date(dataEmissao);
+      const diffMin = Math.floor((agora - emissao) / 60000);
+      if (diffMin < 1) return { texto: "Agora", classe: "", atrasado: false };
+      if (diffMin < 60) {
+        const classe = diffMin > 15 ? "danger" : diffMin > 8 ? "warning" : "";
+        return { texto: `${diffMin} min`, classe, atrasado: diffMin > 15 };
+      }
+      const horas = Math.floor(diffMin / 60);
+      const mins = diffMin % 60;
+      return { texto: `${horas}h${mins > 0 ? ` ${mins}min` : ''}`, classe: "danger", atrasado: true };
+    }
+
+    function carregarPedidos() {
+      fetch('/api/pedidos')
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(dados => {
+          renderizarPedidos(dados);
+          verificarNovosPedidos(dados);
+        })
+        .catch(() => {
+          document.getElementById('pedidos').innerHTML = '<h2 class="mensagem-vazia" style="color:#f87171;">Erro de conexão</h2>';
+        });
+    }
+
+    function renderizarPedidos(dados) {
+      const container = document.getElementById('pedidos');
+      container.innerHTML = '';
+      Object.values(timers).forEach(clearInterval);
+      timers = {};
+
+      if (dados.length === 0) {
+        container.innerHTML = '<h2 class="mensagem-vazia">🍽️ Nenhum pedido pendente 🍽️</h2>';
+        document.getElementById('contador-itens').textContent = '0 item(ns) pendente(s)';
+        return;
+      }
+
+      const totalPendentes = dados.length;
+      document.getElementById('contador-itens').textContent = `${totalPendentes} item(ns) pendente(s)`;
+
+      const grupos = {};
+      dados.forEach(row => {
+        const id = row.IDDAV;
+        if (!grupos[id]) {
+          grupos[id] = {
+            itensPendentes: [],
+            itensConcluidos: 0,
+            mesa: row.MESA || 'Balcão',
+            obs: row.OBSERVACAO || '',
+            dataHora: new Date(row.DATA_HORA_EMISSAO)
+          };
+        }
+        if (row.KDS_PRONTO === 1) {
+          grupos[id].itensConcluidos++;
+        } else {
+          grupos[id].itensPendentes.push({
+            item: row.ITEM,
+            qt: row.QT,
+            descricao: row.DESCRICAO.trim(),
+            vendedorItem: row.VENDEDOR_ITEM?.trim() || 'Não informado'
+          });
+        }
+      });
+
+      Object.keys(grupos)
+        .sort((a, b) => grupos[a].dataHora - grupos[b].dataHora)
+        .forEach(idDav => {
+          const grupo = grupos[idDav];
+          if (grupo.itensPendentes.length === 0) return;
+
+          const divPedido = document.createElement('div');
+          divPedido.className = 'pedido';
+          divPedido.dataset.idDav = idDav;
+
+          const tempoInfo = formatarTempoDeEspera(grupo.dataHora);
+          if (tempoInfo.atrasado) divPedido.classList.add('atrasado');
+
+          divPedido.innerHTML = `
+            <div class="header-pedido">
+              <div class="numero-pedido">#${idDav}</div>
+              <div class="tempo-espera ${tempoInfo.classe}">${tempoInfo.texto}</div>
+            </div>
+            <div class="mesa">${grupo.mesa}</div>
+            <div class="itens-container">
+              ${grupo.itensPendentes.map(item => `
+                <div class="item">
+                  <div class="item-header">
+                    <span class="qt">${item.qt}x</span>
+                    <span class="descricao">${item.descricao}</span>
+                    <button class="btn-item-pronto" onclick="marcarItemPronto(${idDav}, ${item.item})">Pronto</button>
+                  </div>
+                  <div class="vendedor-item">Lançado por: <span>${item.vendedorItem}</span></div>
+                </div>
+              `).join('')}
+              ${grupo.itensConcluidos > 0 ? `
+                <div class="itens-concluidos">+ ${grupo.itensConcluidos} item(ns) já concluído(s)</div>
+              ` : ''}
+            </div>
+            ${grupo.obs ? `<div class="obs">📌 ${grupo.obs.trim()}</div>` : ''}
+            <button class="btn-pronto ${tempoInfo.classe === 'danger' ? 'danger-pulse' : ''}"
+                    onclick="marcarPedidoCompleto(${idDav})">
+              Marcar Tudo Pronto
+            </button>
+          `;
+
+          container.appendChild(divPedido);
+
+          timers[idDav] = setInterval(() => {
+            const tempoSpan = divPedido.querySelector('.tempo-espera');
+            const novoTempo = formatarTempoDeEspera(grupo.dataHora);
+            if (tempoSpan) {
+              tempoSpan.textContent = novoTempo.texto;
+              tempoSpan.className = `tempo-espera ${novoTempo.classe}`;
+            }
+            const card = divPedido;
+            if (novoTempo.atrasado) {
+              card.classList.add('atrasado');
+            } else {
+              card.classList.remove('atrasado');
+            }
+            const btn = divPedido.querySelector('.btn-pronto');
+            if (btn) {
+              if (novoTempo.classe === 'danger') {
+                btn.classList.add('danger-pulse');
+              } else {
+                btn.classList.remove('danger-pulse');
+              }
+            }
+          }, 20000);
+        });
+    }
+
+    function marcarItemPronto(idDav, item) {
+      if (!confirm(`Marcar este item como PRONTO?`)) return;
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = "...";
+      fetch('/api/item/pronto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idDav, item })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.sucesso) carregarPedidos();
+        else {
+          alert("Erro: " + (data.error || "Falha"));
+          btn.disabled = false;
+          btn.textContent = "Pronto";
+        }
+      })
+      .catch(() => {
+        alert("Erro de conexão");
+        btn.disabled = false;
+        btn.textContent = "Pronto";
+      });
+    }
+
+    // ==================== IMPRESSÃO SILENCIOSA COM QZ TRAY ====================
+    function imprimirComanda(comandaTexto) {
+      if (!qz.websocket.isActive()) {
+        alert("qZ Tray não está conectado. Verifique se o programa está aberto.");
+        return;
+      }
+
+      const config = qz.configs.create(null); // Usa impressora padrão do Windows
+
+      const data = [
+        '\x1B' + '\x40',                   // Inicializa impressora
+        '\x1B' + '\x61' + '\x31',           // Centraliza texto
+        comandaTexto.replace(/\n/g, '\n\x0A'),
+        '\x1D' + '\x56' + '\x00'            // Corte total do papel (se a impressora suportar)
+      ];
+
+      qz.print(config, data).catch(err => {
+        console.error("Erro ao imprimir:", err);
+        alert("Falha na impressão. Verifique a impressora e o qZ Tray.");
+      });
+    }
+
+    function marcarPedidoCompleto(idDav) {
+      if (!confirm(`Confirmar que o pedido #${idDav} está TOTALMENTE PRONTO?`)) return;
+      const card = document.querySelector(`.pedido[data-id-dav="${idDav}"]`);
+      const btn = card.querySelector('.btn-pronto');
+      btn.disabled = true;
+      btn.textContent = "Processando...";
+
+      fetch('/api/pedido/pronto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idDav })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.sucesso) {
+          const comanda = `
+==================================
+   PEDIDO CONCLUÍDO NA COZINHA
+==================================
+Pedido #: ${idDav}
+Mesa: ${data.mesa}
+Emitido por: ${data.atendente}
+Hora conclusão: ${data.hora}
+Tempo de produção: ${data.tempoProducao}
+
+Itens:
+${data.pedido.map(i => `${i.QT}x ${i.DESCRICAO}`.padEnd(32)).join('\n')}
+
+${data.observacao ? 'Obs: ' + data.observacao.trim() : ''}
+==================================
+            Obrigado!
+==================================
+          `;
+
+          // IMPRESSÃO DIRETA (sem caixa de diálogo)
+          imprimirComanda(comanda);
+
+          carregarPedidos();
+        } else {
+          alert("Erro: " + (data.error || "Falha"));
+          btn.disabled = false;
+          btn.textContent = "Marcar Tudo Pronto";
+        }
+      })
+      .catch(() => {
+        alert("Erro de conexão");
+        btn.disabled = false;
+        btn.textContent = "Marcar Tudo Pronto";
+      });
+    }
+
+    function verificarNovosPedidos(dadosAtuais) {
+      const qtdPedidosAtuais = new Set(dadosAtuais.map(r => r.IDDAV)).size;
+      if (qtdPedidosAtuais > ultimoQuantidadePedidos && ultimoQuantidadePedidos > 0) {
+        const audio = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
+        audio.volume = 0.8;
+        audio.play().catch(() => {});
+      }
+      ultimoQuantidadePedidos = qtdPedidosAtuais;
+    }
+
+    carregarPedidos();
+    setInterval(carregarPedidos, 10000);
+
+    socket.on('atualizar', dados => {
+      if (dados) renderizarPedidos(dados);
+      else carregarPedidos();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key.toLowerCase() === 'f') {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
